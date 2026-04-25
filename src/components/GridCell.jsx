@@ -1,4 +1,4 @@
-import { Check, Clock, Camera } from 'lucide-react';
+import { Check, Camera } from 'lucide-react';
 
 export default function GridCell({ cell, onClick }) {
   const { status, emoji, name, photoData } = cell;
@@ -20,15 +20,21 @@ export default function GridCell({ cell, onClick }) {
 
   if (status === 'pending') {
     return (
-      <div className="relative aspect-square rounded-2xl overflow-hidden border-2 border-yellow-400 shadow-sm">
-        <img src={photoData} alt={name} className="w-full h-full object-cover opacity-75" />
-        <div className="absolute top-1.5 right-1.5 bg-yellow-400 rounded-full p-0.5 shadow">
-          <Clock size={13} className="text-white" strokeWidth={3} />
+      <button
+        onClick={onClick}
+        className="relative aspect-square rounded-2xl overflow-hidden border-2 border-yellow-400 shadow-sm w-full active:scale-95 transition-transform"
+      >
+        <img src={photoData} alt={name} className="w-full h-full object-cover opacity-50" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-black/20">
+          <div className="bg-yellow-400/90 rounded-full p-1.5">
+            <Camera size={14} className="text-white" />
+          </div>
+          <span className="text-white text-xs font-bold drop-shadow">重拍</span>
         </div>
         <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/60 to-transparent pt-4 pb-1 px-1">
           <p className="text-white text-xs text-center truncate leading-tight">{name}</p>
         </div>
-      </div>
+      </button>
     );
   }
 

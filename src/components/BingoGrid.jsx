@@ -8,7 +8,8 @@ export default function BingoGrid({ grid, bingoLines, onPhotoTaken }) {
   const [uploading, setUploading] = useState(false);
 
   const handleCellClick = (index) => {
-    if (grid[index].status !== 'empty' || uploading) return;
+    const status = grid[index].status;
+    if (status === 'approved' || uploading) return;
     pendingIndexRef.current = index;
     fileInputRef.current.value = '';
     fileInputRef.current.click();
@@ -62,7 +63,7 @@ export default function BingoGrid({ grid, bingoLines, onPhotoTaken }) {
 
       {!uploading && (
         <p className="text-gray-400 text-xs text-center mt-4 leading-relaxed">
-          點擊空白格子開啟相機拍照。<br />
+          點擊空白格子拍照，點擊黃色格子可重拍。<br />
           拍完需等待隊友投票通過，才會變綠色勾勾！
         </p>
       )}
