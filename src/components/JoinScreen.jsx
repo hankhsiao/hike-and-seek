@@ -24,7 +24,7 @@ export default function JoinScreen({ user, onJoin }) {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center p-4"
+      className="fixed inset-0 flex items-center justify-center p-4"
       style={{
         background: 'linear-gradient(160deg, #071a06 0%, #1a3d0a 35%, #0b2a04 65%, #040d03 100%)',
       }}
@@ -36,7 +36,7 @@ export default function JoinScreen({ user, onJoin }) {
           </div>
         </div>
 
-        <h1 className="text-3xl font-bold text-center text-gray-800 mb-1">大自然寶果</h1>
+        <h1 className="text-3xl font-bold text-center text-gray-800 mb-1">大自然賓果</h1>
         <p className="text-gray-400 text-center mb-7 text-sm">與朋友一起在 Hiking 中尋寶吧！</p>
 
         <div className="mb-4">
