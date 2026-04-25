@@ -8,6 +8,7 @@ import { getRandomGrid } from '../utils/gameItems';
 import { checkBingo, isNewBingoAtIndex } from '../utils/bingoChecker';
 import BingoGrid from './BingoGrid';
 import ActivityFeed from './ActivityFeed';
+import PlayerList from './PlayerList';
 import { Users, LogOut } from 'lucide-react';
 
 export default function GameScreen({ user, roomId, nickname, onLeave }) {
@@ -44,7 +45,7 @@ export default function GameScreen({ user, roomId, nickname, onLeave }) {
     return unsub;
   }, []);
 
-  // Listen to all players in room (for player count + submitter grid updates)
+  // Listen to all players in room
   useEffect(() => {
     const q = query(
       collection(db, 'hiking_players'),
@@ -80,37 +81,54 @@ export default function GameScreen({ user, roomId, nickname, onLeave }) {
 
   const handlePhotoTaken = async (gridIndex, thumbnailData, activityPhotoData) => {
     const cell = myGrid[gridIndex];
-    if (cell.status !== 'empty') return;
+    if (cell.status !== 'empty' && cell.status !== 'pending') return;
+
+    const isRetake = cell.status === 'pending';
 
     setActiveTab('activity');
     setNewActivityCount(0);
 
     const updatedGrid = myGrid.map((c, i) =>
-      i === gridIndex ? { ...c, status: 'pending', photoData: thumbnailData } : c
+      i === gridIndex ? { ...c, photoData: thumbnailData } : c
     );
 
     try {
-      const activityRef = await addDoc(collection(db, 'hiking_activities'), {
-        roomId,
-        playerId: user.uid,
-        playerName: nickname,
-        gridIndex,
-        itemId: cell.id,
-        itemName: cell.name,
-        itemEmoji: cell.emoji,
-        photoData: thumbnailData,
-        activityPhotoData: activityPhotoData || thumbnailData,
-        votes: {},
-        status: 'pending',
-        createdAt: serverTimestamp(),
-      });
+      if (isRetake && cell.activityId) {
+        // Reset the existing activity with new photo and cleared votes
+        const activityRef = doc(db, 'hiking_activities', cell.activityId);
+        await updateDoc(activityRef, {
+          photoData: thumbnailData,
+          activityPhotoData: activityPhotoData || thumbnailData,
+          votes: {},
+          status: 'pending',
+          updatedAt: serverTimestamp(),
+        });
+        await updateDoc(playerRef, { grid: updatedGrid });
+      } else {
+        // New submission
+        const activityRef = await addDoc(collection(db, 'hiking_activities'), {
+          roomId,
+          playerId: user.uid,
+          playerName: nickname,
+          gridIndex,
+          itemId: cell.id,
+          itemName: cell.name,
+          itemEmoji: cell.emoji,
+          photoData: thumbnailData,
+          activityPhotoData: activityPhotoData || thumbnailData,
+          votes: {},
+          status: 'pending',
+          createdAt: serverTimestamp(),
+        });
 
-      updatedGrid[gridIndex] = {
-        ...updatedGrid[gridIndex],
-        activityId: activityRef.id,
-      };
+        updatedGrid[gridIndex] = {
+          ...updatedGrid[gridIndex],
+          status: 'pending',
+          activityId: activityRef.id,
+        };
 
-      await updateDoc(playerRef, { grid: updatedGrid });
+        await updateDoc(playerRef, { grid: updatedGrid });
+      }
     } catch (e) {
       console.error('Upload failed:', e);
       alert('上傳失敗，請檢查網路連線後重試');
@@ -140,12 +158,10 @@ export default function GameScreen({ user, roomId, nickname, onLeave }) {
         const currentVotes = actSnap.data().votes || {};
         const newVotes = { ...currentVotes, [user.uid]: vote };
 
-        // Count votes from non-submitters only
         const eligible = Object.entries(newVotes).filter(([uid]) => uid !== activity.playerId);
         const approvals = eligible.filter(([, v]) => v === 'approve').length;
         const rejections = eligible.filter(([, v]) => v === 'reject').length;
 
-        // totalOthers = all players except submitter (use cached players; acceptable for game)
         const totalOthers = Math.max(
           players.filter(p => p.userId !== activity.playerId).length,
           1
@@ -201,58 +217,71 @@ export default function GameScreen({ user, roomId, nickname, onLeave }) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col max-w-md mx-auto">
-      {/* Header */}
-      <div className="bg-green-800 text-white px-4 pt-4 pb-3 flex-shrink-0">
-        <div className="flex justify-between items-start">
-          <div>
-            <div className="font-bold text-lg leading-tight">房間：{roomId}</div>
-            <div className="text-green-200 text-xs flex items-center gap-1 mt-0.5">
-              <Users size={12} />
-              <span>{players.length} 位玩家</span>
+    <div className="min-h-screen bg-gray-50 max-w-md mx-auto">
+      {/* Sticky header + tabs */}
+      <div className="sticky top-0 z-30">
+        {/* Header */}
+        <div className="bg-green-800 text-white px-4 pt-4 pb-3">
+          <div className="flex justify-between items-start">
+            <div>
+              <div className="font-bold text-lg leading-tight">房間：{roomId}</div>
+              <div className="text-green-200 text-xs flex items-center gap-1 mt-0.5">
+                <Users size={12} />
+                <span>{players.length} 位玩家</span>
+              </div>
             </div>
+            <button
+              onClick={onLeave}
+              className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white rounded-xl px-3 py-1.5 text-sm font-medium transition active:scale-95"
+            >
+              <LogOut size={14} />
+              離開
+            </button>
           </div>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex bg-white border-b border-gray-100 shadow-sm">
           <button
-            onClick={onLeave}
-            className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white rounded-xl px-3 py-1.5 text-sm font-medium transition active:scale-95"
+            className={`flex-1 py-3 text-sm font-semibold transition-colors ${
+              activeTab === 'grid'
+                ? 'text-green-700 border-b-2 border-green-600'
+                : 'text-gray-400 hover:text-gray-600'
+            }`}
+            onClick={() => setActiveTab('grid')}
           >
-            <LogOut size={14} />
-            離開
+            九宮格
+          </button>
+          <button
+            className={`flex-1 py-3 text-sm font-semibold transition-colors relative ${
+              activeTab === 'activity'
+                ? 'text-green-700 border-b-2 border-green-600'
+                : 'text-gray-400 hover:text-gray-600'
+            }`}
+            onClick={switchToActivity}
+          >
+            活動與投票
+            {newActivityCount > 0 && activeTab !== 'activity' && (
+              <span className="absolute top-2 right-4 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
+                {newActivityCount > 9 ? '9+' : newActivityCount}
+              </span>
+            )}
+          </button>
+          <button
+            className={`flex-1 py-3 text-sm font-semibold transition-colors ${
+              activeTab === 'players'
+                ? 'text-green-700 border-b-2 border-green-600'
+                : 'text-gray-400 hover:text-gray-600'
+            }`}
+            onClick={() => setActiveTab('players')}
+          >
+            玩家
           </button>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex bg-white border-b border-gray-100 flex-shrink-0">
-        <button
-          className={`flex-1 py-3 text-sm font-semibold transition-colors relative ${
-            activeTab === 'grid'
-              ? 'text-green-700 border-b-2 border-green-600'
-              : 'text-gray-400 hover:text-gray-600'
-          }`}
-          onClick={() => setActiveTab('grid')}
-        >
-          我的九宮格
-        </button>
-        <button
-          className={`flex-1 py-3 text-sm font-semibold transition-colors relative ${
-            activeTab === 'activity'
-              ? 'text-green-700 border-b-2 border-green-600'
-              : 'text-gray-400 hover:text-gray-600'
-          }`}
-          onClick={switchToActivity}
-        >
-          活動與投票
-          {newActivityCount > 0 && activeTab !== 'activity' && (
-            <span className="absolute top-2 right-6 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold">
-              {newActivityCount > 9 ? '9+' : newActivityCount}
-            </span>
-          )}
-        </button>
-      </div>
-
       {/* Content */}
-      <div className="flex-1 overflow-auto">
+      <div>
         {activeTab === 'grid' && myGrid && (
           <BingoGrid
             grid={myGrid}
@@ -272,6 +301,12 @@ export default function GameScreen({ user, roomId, nickname, onLeave }) {
             currentUserId={user.uid}
             totalPlayers={players.length}
             onVote={handleVote}
+          />
+        )}
+        {activeTab === 'players' && (
+          <PlayerList
+            players={players}
+            currentUserId={user.uid}
           />
         )}
       </div>
