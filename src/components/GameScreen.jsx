@@ -82,6 +82,9 @@ export default function GameScreen({ user, roomId, nickname, onLeave }) {
     const cell = myGrid[gridIndex];
     if (cell.status !== 'empty') return;
 
+    setActiveTab('activity');
+    setNewActivityCount(0);
+
     const updatedGrid = myGrid.map((c, i) =>
       i === gridIndex ? { ...c, status: 'pending', photoData: thumbnailData } : c
     );
