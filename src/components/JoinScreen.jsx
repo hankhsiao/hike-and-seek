@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { Trophy } from 'lucide-react';
+import { Trophy, Shield } from 'lucide-react';
 
-export default function JoinScreen({ onJoin }) {
+export default function JoinScreen({ onJoin, onAdminJoin }) {
   const [nickname, setNickname] = useState('');
   const [password, setPassword] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [adminMode, setAdminMode] = useState(false);
+  const [adminPw, setAdminPw] = useState('');
 
   const handleJoin = async () => {
     const name = nickname.trim();
@@ -102,6 +104,43 @@ export default function JoinScreen({ onJoin }) {
         >
           {loading ? '進入中...' : '進入遊戲'}
         </button>
+
+        {/* Admin entry */}
+        {!adminMode ? (
+          <button
+            onClick={() => setAdminMode(true)}
+            className="mt-5 w-full flex items-center justify-center gap-1 text-gray-300 hover:text-gray-500 text-xs transition"
+          >
+            <Shield size={11} />
+            管理員入口
+          </button>
+        ) : (
+          <div className="mt-5 border-t border-gray-100 pt-4">
+            <label className="block font-semibold text-gray-600 mb-2 text-xs">管理員密碼</label>
+            <div className="flex gap-2">
+              <input
+                type="password"
+                value={adminPw}
+                onChange={e => { setAdminPw(e.target.value); setError(''); }}
+                onKeyDown={e => e.key === 'Enter' && onAdminJoin(adminPw)}
+                placeholder="輸入管理員密碼"
+                className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-800 outline-none focus:border-gray-400 transition"
+              />
+              <button
+                onClick={() => onAdminJoin(adminPw)}
+                className="bg-gray-800 hover:bg-gray-900 active:scale-95 text-white rounded-xl px-4 py-2 text-sm font-semibold transition"
+              >
+                進入
+              </button>
+              <button
+                onClick={() => { setAdminMode(false); setAdminPw(''); setError(''); }}
+                className="text-gray-400 hover:text-gray-600 text-sm px-2 transition"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -4,12 +4,16 @@ import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
 import { derivePlayerId } from './utils/playerUtils';
 import JoinScreen from './components/JoinScreen';
 import GameScreen from './components/GameScreen';
+import AdminScreen from './components/AdminScreen';
 import SetupScreen from './components/SetupScreen';
+
+const ADMIN_PASSWORD = import.meta.env.VITE_ADMIN_PASSWORD;
 
 export default function App() {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [gameState, setGameState] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     if (!isConfigured) {
@@ -45,8 +49,18 @@ export default function App() {
     setGameState({ roomId, nickname, stablePlayerId });
   };
 
+  const handleAdminJoin = (pw) => {
+    if (!ADMIN_PASSWORD) return alert('尚未設定管理員密碼（VITE_ADMIN_PASSWORD）');
+    if (pw !== ADMIN_PASSWORD) return alert('密碼錯誤');
+    setIsAdmin(true);
+  };
+
+  if (isAdmin) {
+    return <AdminScreen onLeave={() => setIsAdmin(false)} />;
+  }
+
   if (!gameState) {
-    return <JoinScreen onJoin={handleJoin} />;
+    return <JoinScreen onJoin={handleJoin} onAdminJoin={handleAdminJoin} />;
   }
 
   return (
