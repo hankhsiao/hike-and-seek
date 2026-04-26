@@ -72,9 +72,25 @@ export default function AdminScreen({ onLeave }) {
     }
   };
 
-  const sortedRooms = [...rooms].sort((a, b) =>
-    (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0)
-  );
+  // Derive room list from players (works even without hiking_rooms docs)
+  const roomMap = {};
+  players.forEach(p => {
+    if (!roomMap[p.roomId]) roomMap[p.roomId] = { id: p.roomId, roomPlayers: [], roomActivities: [], meta: null };
+    roomMap[p.roomId].roomPlayers.push(p);
+  });
+  activities.forEach(a => {
+    if (!roomMap[a.roomId]) roomMap[a.roomId] = { id: a.roomId, roomPlayers: [], roomActivities: [], meta: null };
+    roomMap[a.roomId].roomActivities.push(a);
+  });
+  rooms.forEach(r => {
+    if (roomMap[r.id]) roomMap[r.id].meta = r;
+  });
+
+  const derivedRooms = Object.values(roomMap).sort((a, b) => {
+    const aTs = a.meta?.createdAt?.seconds ?? (a.roomPlayers[0]?.joinedAt?.seconds ?? 0);
+    const bTs = b.meta?.createdAt?.seconds ?? (b.roomPlayers[0]?.joinedAt?.seconds ?? 0);
+    return bTs - aTs;
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 max-w-md mx-auto">
@@ -94,7 +110,7 @@ export default function AdminScreen({ onLeave }) {
           </button>
         </div>
         <div className="text-gray-400 text-xs mt-1">
-          {rooms.length} 個房間 · {players.length} 位玩家 · {activities.length} 筆活動
+          {derivedRooms.length} 個房間 · {players.length} 位玩家 · {activities.length} 筆活動
         </div>
       </div>
 
@@ -102,7 +118,7 @@ export default function AdminScreen({ onLeave }) {
         {/* Delete all button */}
         <button
           onClick={handleDeleteAll}
-          disabled={busy || rooms.length === 0}
+          disabled={busy || derivedRooms.length === 0}
           className="w-full flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 active:scale-95 disabled:opacity-50 text-white rounded-2xl py-3 font-bold transition-all shadow-sm"
         >
           <Trash2 size={16} />
@@ -110,29 +126,28 @@ export default function AdminScreen({ onLeave }) {
         </button>
 
         {/* Room list */}
-        {sortedRooms.length === 0 ? (
+        {derivedRooms.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
             <p className="text-4xl mb-3">🏕️</p>
             <p className="font-medium">目前沒有任何房間</p>
           </div>
         ) : (
           <div className="space-y-3">
-            {sortedRooms.map(room => {
-              const roomPlayers = players.filter(p => p.roomId === room.id);
-              const roomActivities = activities.filter(a => a.roomId === room.id);
-              const createdAt = room.createdAt?.seconds
-                ? new Date(room.createdAt.seconds * 1000).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+            {derivedRooms.map(({ id, roomPlayers, roomActivities, meta }) => {
+              const ts = meta?.createdAt?.seconds ?? roomPlayers[0]?.joinedAt?.seconds;
+              const createdAt = ts
+                ? new Date(ts * 1000).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
                 : '—';
 
               return (
-                <div key={room.id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
+                <div key={id} className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100">
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <div className="font-bold text-gray-800 text-lg tracking-widest font-mono">{room.id}</div>
+                      <div className="font-bold text-gray-800 text-lg tracking-widest font-mono">{id}</div>
                       <div className="text-xs text-gray-400 mt-0.5">{createdAt}</div>
                     </div>
                     <button
-                      onClick={() => handleDeleteRoom(room.id)}
+                      onClick={() => handleDeleteRoom(id)}
                       disabled={busy}
                       className="flex items-center gap-1 bg-red-50 hover:bg-red-100 text-red-500 rounded-xl px-3 py-1.5 text-xs font-semibold transition active:scale-95 disabled:opacity-50"
                     >
