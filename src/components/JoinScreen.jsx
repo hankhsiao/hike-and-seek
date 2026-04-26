@@ -1,21 +1,31 @@
 import { useState } from 'react';
 import { Trophy } from 'lucide-react';
 
-export default function JoinScreen({ user, onJoin }) {
+export default function JoinScreen({ onJoin }) {
   const [nickname, setNickname] = useState('');
+  const [password, setPassword] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleJoin = () => {
+  const handleJoin = async () => {
     const name = nickname.trim();
+    const pw = password.trim();
     const room = roomCode.trim().toUpperCase();
 
     if (!name) return setError('請輸入你的暱稱');
     if (name.length > 12) return setError('暱稱最多 12 個字');
+    if (!pw) return setError('請輸入短密碼');
+    if (pw.length > 8) return setError('短密碼最多 8 個字');
     if (room.length < 4 || room.length > 6) return setError('房間號碼需為 4–6 碼');
     if (!/^[A-Z0-9]+$/.test(room)) return setError('房間號碼只能包含英文字母與數字');
 
-    onJoin({ roomId: room, nickname: name });
+    setLoading(true);
+    try {
+      await onJoin({ roomId: room, nickname: name, password: pw });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -52,6 +62,22 @@ export default function JoinScreen({ user, onJoin }) {
           />
         </div>
 
+        <div className="mb-4">
+          <label className="block font-semibold text-gray-700 mb-2 text-sm">
+            短密碼
+            <span className="text-gray-400 font-normal ml-1 text-xs">（用來保護你的暱稱，最多 8 位）</span>
+          </label>
+          <input
+            type="password"
+            value={password}
+            onChange={e => { setPassword(e.target.value); setError(''); }}
+            onKeyDown={handleKeyDown}
+            placeholder="例如：1234"
+            maxLength={8}
+            className="w-full border border-gray-200 rounded-2xl px-4 py-3 text-gray-800 outline-none focus:border-green-400 focus:ring-2 focus:ring-green-100 transition"
+          />
+        </div>
+
         <div className="mb-6">
           <label className="block font-semibold text-gray-700 mb-2 text-sm">房間號碼</label>
           <input
@@ -71,9 +97,10 @@ export default function JoinScreen({ user, onJoin }) {
 
         <button
           onClick={handleJoin}
-          className="w-full bg-green-600 hover:bg-green-700 active:scale-95 text-white rounded-2xl py-4 text-lg font-bold transition-all shadow-md"
+          disabled={loading}
+          className="w-full bg-green-600 hover:bg-green-700 active:scale-95 text-white rounded-2xl py-4 text-lg font-bold transition-all shadow-md disabled:opacity-60"
         >
-          進入遊戲
+          {loading ? '進入中...' : '進入遊戲'}
         </button>
       </div>
     </div>

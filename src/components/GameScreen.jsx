@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   doc, setDoc, onSnapshot, collection, addDoc,
   updateDoc, serverTimestamp, query, where, runTransaction,
+  getDocs, writeBatch,
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { getRandomGrid } from '../utils/gameItems';
@@ -9,19 +10,38 @@ import { checkBingo, isNewBingoAtIndex } from '../utils/bingoChecker';
 import BingoGrid from './BingoGrid';
 import ActivityFeed from './ActivityFeed';
 import PlayerList from './PlayerList';
-import { Users, LogOut } from 'lucide-react';
+import { Users, LogOut, RotateCcw } from 'lucide-react';
 
-export default function GameScreen({ user, roomId, nickname, onLeave }) {
+export default function GameScreen({ user, roomId, nickname, stablePlayerId, onLeave }) {
   const [activeTab, setActiveTab] = useState('grid');
   const [myGrid, setMyGrid] = useState(null);
   const [players, setPlayers] = useState([]);
   const [activities, setActivities] = useState([]);
   const [newActivityCount, setNewActivityCount] = useState(0);
+  const [roomData, setRoomData] = useState(null);
   const initialized = useRef(false);
   const prevActivityLen = useRef(0);
 
-  const playerDocId = `${roomId}_${user.uid}`;
+  const playerDocId = `${roomId}_${stablePlayerId}`;
   const playerRef = doc(db, 'hiking_players', playerDocId);
+  const roomRef = doc(db, 'hiking_rooms', roomId);
+
+  const isCreator = roomData?.creatorId === stablePlayerId;
+
+  // Create room if it doesn't exist (first joiner becomes creator), then listen
+  useEffect(() => {
+    runTransaction(db, async (tx) => {
+      const roomSnap = await tx.get(roomRef);
+      if (!roomSnap.exists()) {
+        tx.set(roomRef, { roomId, creatorId: stablePlayerId, createdAt: serverTimestamp() });
+      }
+    }).catch(console.error);
+
+    const unsub = onSnapshot(roomRef, (snap) => {
+      if (snap.exists()) setRoomData(snap.data());
+    });
+    return unsub;
+  }, []);
 
   // Initialize + listen to own grid
   useEffect(() => {
@@ -33,7 +53,7 @@ export default function GameScreen({ user, roomId, nickname, onLeave }) {
         initialized.current = true;
         const grid = getRandomGrid();
         setDoc(playerRef, {
-          userId: user.uid,
+          userId: stablePlayerId,
           nickname,
           roomId,
           grid,
@@ -94,7 +114,6 @@ export default function GameScreen({ user, roomId, nickname, onLeave }) {
 
     try {
       if (isRetake && cell.activityId) {
-        // Reset the existing activity with new photo and cleared votes
         const activityRef = doc(db, 'hiking_activities', cell.activityId);
         await updateDoc(activityRef, {
           photoData: thumbnailData,
@@ -105,10 +124,9 @@ export default function GameScreen({ user, roomId, nickname, onLeave }) {
         });
         await updateDoc(playerRef, { grid: updatedGrid });
       } else {
-        // New submission
         const activityRef = await addDoc(collection(db, 'hiking_activities'), {
           roomId,
-          playerId: user.uid,
+          playerId: stablePlayerId,
           playerName: nickname,
           gridIndex,
           itemId: cell.id,
@@ -138,7 +156,7 @@ export default function GameScreen({ user, roomId, nickname, onLeave }) {
   const handleVote = async (activityId, vote) => {
     const activity = activities.find(a => a.id === activityId);
     if (!activity || activity.status !== 'pending') return;
-    if (activity.playerId === user.uid) return;
+    if (activity.playerId === stablePlayerId) return;
 
     const activityRef = doc(db, 'hiking_activities', activityId);
     const submitterRef = doc(db, 'hiking_players', `${roomId}_${activity.playerId}`);
@@ -156,7 +174,7 @@ export default function GameScreen({ user, roomId, nickname, onLeave }) {
         if (!actSnap.exists() || actSnap.data().status !== 'pending') return;
 
         const currentVotes = actSnap.data().votes || {};
-        const newVotes = { ...currentVotes, [user.uid]: vote };
+        const newVotes = { ...currentVotes, [stablePlayerId]: vote };
 
         const eligible = Object.entries(newVotes).filter(([uid]) => uid !== activity.playerId);
         const approvals = eligible.filter(([, v]) => v === 'approve').length;
@@ -211,6 +229,28 @@ export default function GameScreen({ user, roomId, nickname, onLeave }) {
     }
   };
 
+  const handleRestart = async () => {
+    if (!window.confirm('確定要重新開始遊戲嗎？所有進度和照片都會清除。')) return;
+
+    try {
+      const [activitiesSnap, playersSnap] = await Promise.all([
+        getDocs(query(collection(db, 'hiking_activities'), where('roomId', '==', roomId))),
+        getDocs(query(collection(db, 'hiking_players'), where('roomId', '==', roomId))),
+      ]);
+
+      const batch = writeBatch(db);
+      activitiesSnap.docs.forEach(d => batch.delete(d.ref));
+      playersSnap.docs.forEach(d => batch.update(d.ref, { grid: getRandomGrid() }));
+      await batch.commit();
+
+      initialized.current = false;
+      setActiveTab('grid');
+    } catch (e) {
+      console.error('Restart failed:', e);
+      alert('重新開始失敗，請重試');
+    }
+  };
+
   const switchToActivity = () => {
     setActiveTab('activity');
     setNewActivityCount(0);
@@ -228,15 +268,29 @@ export default function GameScreen({ user, roomId, nickname, onLeave }) {
               <div className="text-green-200 text-xs flex items-center gap-1 mt-0.5">
                 <Users size={12} />
                 <span>{players.length} 位玩家</span>
+                {isCreator && (
+                  <span className="ml-1 bg-yellow-500/30 text-yellow-200 rounded px-1 text-xs">房主</span>
+                )}
               </div>
             </div>
-            <button
-              onClick={onLeave}
-              className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white rounded-xl px-3 py-1.5 text-sm font-medium transition active:scale-95"
-            >
-              <LogOut size={14} />
-              離開
-            </button>
+            <div className="flex items-center gap-2">
+              {isCreator && (
+                <button
+                  onClick={handleRestart}
+                  className="flex items-center gap-1 bg-white/10 hover:bg-white/20 text-white rounded-xl px-3 py-1.5 text-sm font-medium transition active:scale-95"
+                >
+                  <RotateCcw size={13} />
+                  重置
+                </button>
+              )}
+              <button
+                onClick={onLeave}
+                className="flex items-center gap-1 bg-white/20 hover:bg-white/30 text-white rounded-xl px-3 py-1.5 text-sm font-medium transition active:scale-95"
+              >
+                <LogOut size={14} />
+                離開
+              </button>
+            </div>
           </div>
         </div>
 
@@ -298,7 +352,7 @@ export default function GameScreen({ user, roomId, nickname, onLeave }) {
         {activeTab === 'activity' && (
           <ActivityFeed
             activities={activities}
-            currentUserId={user.uid}
+            currentUserId={stablePlayerId}
             totalPlayers={players.length}
             onVote={handleVote}
           />
@@ -306,7 +360,7 @@ export default function GameScreen({ user, roomId, nickname, onLeave }) {
         {activeTab === 'players' && (
           <PlayerList
             players={players}
-            currentUserId={user.uid}
+            currentUserId={stablePlayerId}
           />
         )}
       </div>

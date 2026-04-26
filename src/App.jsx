@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { auth, isConfigured } from './firebase';
 import { onAuthStateChanged, signInAnonymously } from 'firebase/auth';
+import { derivePlayerId } from './utils/playerUtils';
 import JoinScreen from './components/JoinScreen';
 import GameScreen from './components/GameScreen';
 import SetupScreen from './components/SetupScreen';
@@ -39,8 +40,13 @@ export default function App() {
     );
   }
 
+  const handleJoin = async ({ roomId, nickname, password }) => {
+    const stablePlayerId = await derivePlayerId(nickname, password);
+    setGameState({ roomId, nickname, stablePlayerId });
+  };
+
   if (!gameState) {
-    return <JoinScreen user={user} onJoin={setGameState} />;
+    return <JoinScreen onJoin={handleJoin} />;
   }
 
   return (
@@ -48,6 +54,7 @@ export default function App() {
       user={user}
       roomId={gameState.roomId}
       nickname={gameState.nickname}
+      stablePlayerId={gameState.stablePlayerId}
       onLeave={() => setGameState(null)}
     />
   );
