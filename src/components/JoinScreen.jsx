@@ -25,6 +25,8 @@ export default function JoinScreen({ onJoin, onAdminJoin }) {
     setLoading(true);
     try {
       await onJoin({ roomId: room, nickname: name, password: pw });
+    } catch (err) {
+      setError(err.message || '進入失敗，請重試');
     } finally {
       setLoading(false);
     }
